@@ -115,8 +115,8 @@ def generator_agent(question: str, history: list | None = None) -> str:
             tool_name = call["name"]
             args = call["args"]
 
-            print(f"\n🔧 Calling tool: {tool_name}")
-            print(f"   Args: {args}")
+            print(f"\n🔧 Calling tool: {tool_name}", flush=True)
+            print(f"   Args: {args}", flush=True)
 
             selected_tool = None
 

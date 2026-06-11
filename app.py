@@ -5,10 +5,18 @@ from rag_agent.generator import generator_agent
 
 
 def chat(message, history):
-    return generator_agent(
+    print(f"User message: {message}", flush=True)
+    print(f"History length: {len(history) if history else 0}", flush=True)
+
+    response = generator_agent(
         question=message,
         history=history
     )
+
+    print(f"Assistant response: {response}", flush=True)
+
+    return response
+
 
 
 demo = gr.ChatInterface(
@@ -21,6 +29,5 @@ demo = gr.ChatInterface(
 if __name__ == "__main__":
     demo.launch(
         server_name="0.0.0.0",
-        server_port=int(os.getenv("PORT", 8080)),
-        debug=True
+        server_port=int(os.getenv("PORT", 8080))
     )
