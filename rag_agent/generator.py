@@ -39,7 +39,6 @@ def convert_gradio_history(history: list):
 
     return messages
 
-
 def tool_schema_manager(tools) -> List[dict]:
     tool_definitions = []
 

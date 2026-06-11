@@ -6,7 +6,7 @@ from rag_agent.generator import generator_agent
 
 def chat(message, history):
     print(f"User message: {message}", flush=True)
-    print(f"History length: {len(history) if history else 0}", flush=True)
+    print(f"History: {history}", flush=True)
 
     response = generator_agent(
         question=message,
@@ -15,8 +15,10 @@ def chat(message, history):
 
     print(f"Assistant response: {response}", flush=True)
 
-    return response
-
+    return {
+        "role": "assistant",
+        "content": response
+    }
 
 
 demo = gr.ChatInterface(
