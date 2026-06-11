@@ -13,12 +13,14 @@ def chat(message, history):
         history=history
     )
 
+    if response is None:
+        response = "Sorry, I could not generate a response."
+
+    response = str(response)
+
     print(f"Assistant response: {response}", flush=True)
 
-    return {
-        "role": "assistant",
-        "content": response
-    }
+    return response
 
 
 demo = gr.ChatInterface(
