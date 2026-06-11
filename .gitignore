@@ -1,0 +1,8 @@
+.venv/
+.env
+__pycache__/
+*.pyc
+veda_qa.json
+
+# Optional: keep ignored if you rebuild during deploy
+# chroma_db/
