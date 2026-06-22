@@ -1,37 +1,81 @@
 import os
-import gradio as gr
+import uuid
+
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from rag_agent.generator import generator_agent
+from rag_agent.history_store import init_db, get_history, save_message
+
+app = FastAPI(title="Veda Birthday Agent")
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+templates = Jinja2Templates(directory="templates")
+
+init_db()
 
 
-def chat(message, history):
-    print(f"User message: {message}", flush=True)
-    print(f"History: {history}", flush=True)
+@app.get("/", response_class=HTMLResponse)
+def home(request: Request):
+    return templates.TemplateResponse(
+        "index.html",
+        {"request": request}
+    )
 
-    response = generator_agent(
-        question=message,
+
+@app.post("/chat")
+async def chat(request: Request):
+    body = await request.json()
+    user_message = body.get("message", "").strip()
+
+    if not user_message:
+        return JSONResponse(
+            {"response": "Please ask me something about Veda's birthday."}
+        )
+
+    thread_id = request.cookies.get("thread_id")
+
+    if not thread_id:
+        thread_id = str(uuid.uuid4())
+
+    history = get_history(thread_id, limit=4)
+
+    assistant_response = generator_agent(
+        question=user_message,
         history=history
     )
 
-    if response is None:
-        response = "Sorry, I could not generate a response."
+    save_message(thread_id, "user", user_message)
+    save_message(thread_id, "assistant", assistant_response)
 
-    response = str(response)
+    response = JSONResponse(
+        {"response": assistant_response}
+    )
 
-    print(f"Assistant response: {response}", flush=True)
+    response.set_cookie(
+        key="thread_id",
+        value=thread_id,
+        httponly=True,
+        max_age=60 * 60 * 24 * 30,
+        samesite="lax"
+    )
 
     return response
 
 
-demo = gr.ChatInterface(
-    fn=chat,
-    title="Veda Birthday Agent",
-    description="Ask me anything about Veda's birthday 🎂"
-)
+@app.get("/health")
+def health():
+    return {"status": "ok"}
 
 
 if __name__ == "__main__":
-    demo.launch(
-        server_name="0.0.0.0",
-        server_port=int(os.getenv("PORT", 8080))
+    import uvicorn
+
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=int(os.getenv("PORT", 8080))
     )

@@ -3,7 +3,11 @@
 __pycache__/
 *.pyc
 veda_qa.json
-.gradio/
+
+run_local.py
+
+#Runtime chat history (always ignore)
+chat_history.db
 
 # Optional: keep ignored if you rebuild during deploy
 # chroma_db/

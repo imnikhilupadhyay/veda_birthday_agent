@@ -18,7 +18,7 @@ from rag_agent.prompts import RAG_PROMPT
 tool_manager = RAGChain()
 
 
-def convert_gradio_history(history: list):
+def convert_history_to_messages(history: list):
     messages = []
 
     if not history:
@@ -112,7 +112,7 @@ def generator_agent(question: str, history: list | None = None) -> str:
 
     generator_llm_with_tools = generator_llm.bind_tools(tool_definition)
 
-    conversation_messages = convert_gradio_history(history)
+    conversation_messages = convert_history_to_messages(history)
 
     messages = [SystemMessage(content=RAG_PROMPT)]
     messages.extend(conversation_messages)
