@@ -1,7 +1,7 @@
 import os
 import uuid
 
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -12,7 +12,6 @@ from rag_agent.history_store import init_db, get_history, save_message
 app = FastAPI(title="Veda Birthday Agent")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
-
 templates = Jinja2Templates(directory="templates")
 
 init_db()
@@ -21,8 +20,8 @@ init_db()
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return templates.TemplateResponse(
-        "index.html",
-        {"request": request}
+        request=request,
+        name="index.html"
     )
 
 
@@ -32,9 +31,9 @@ async def chat(request: Request):
     user_message = body.get("message", "").strip()
 
     if not user_message:
-        return JSONResponse(
-            {"response": "Please ask me something about Veda's birthday."}
-        )
+        return JSONResponse({
+            "response": "Please ask me something about Veda's birthday."
+        })
 
     thread_id = request.cookies.get("thread_id")
 
@@ -51,9 +50,9 @@ async def chat(request: Request):
     save_message(thread_id, "user", user_message)
     save_message(thread_id, "assistant", assistant_response)
 
-    response = JSONResponse(
-        {"response": assistant_response}
-    )
+    response = JSONResponse({
+        "response": assistant_response
+    })
 
     response.set_cookie(
         key="thread_id",
@@ -69,13 +68,3 @@ async def chat(request: Request):
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(
-        "app:app",
-        host="0.0.0.0",
-        port=int(os.getenv("PORT", 8080))
-    )

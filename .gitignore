@@ -2,6 +2,7 @@
 .env
 __pycache__/
 *.pyc
+
 veda_qa.json
 
 run_local.py
