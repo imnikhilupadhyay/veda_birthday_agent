@@ -183,3 +183,83 @@ def generator_agent(question: str, history: list | None = None) -> str:
         last_response_content
         or "I could not complete the answer because maximum tool iterations were reached."
     )
+
+def generator_agent_stream(question: str, history: list | None = None):
+    if not question:
+        yield "Please ask me something about Veda's birthday."
+        return
+
+    generator_llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+        streaming=True,
+    )
+
+    tools = tool_manager.get_tools()
+    tool_definition = tool_schema_manager(tools)
+    generator_llm_with_tools = generator_llm.bind_tools(tool_definition)
+
+    conversation_messages = convert_history_to_messages(history)
+
+    messages = [SystemMessage(content=RAG_PROMPT)]
+    messages.extend(conversation_messages)
+    messages.append(HumanMessage(content=question))
+
+    for _ in range(4):
+        response = generator_llm_with_tools.invoke(messages)
+        messages.append(response)
+
+        if response.tool_calls:
+            tool_names = [tool_call["name"] for tool_call in response.tool_calls]
+            print(f"Chaining Tools -> {' | '.join(tool_names)}", flush=True)
+
+            for call in response.tool_calls:
+                tool_name = call["name"]
+                args = call.get("args", {})
+
+                selected_tool = None
+                for tool in tools:
+                    if tool.name == tool_name:
+                        selected_tool = tool
+                        break
+
+                if selected_tool is None:
+                    tool_output = f"Tool {tool_name} not found."
+
+                elif tool_name == "condense_question":
+                    tool_output = selected_tool.invoke({
+                        "question": args.get("question", question),
+                        "conversation_history": conversation_messages,
+                    })
+
+                else:
+                    tool_output = selected_tool.invoke(args.get("input", question))
+
+                messages.append(
+                    ToolMessage(
+                        name=tool_name,
+                        content=str(tool_output),
+                        tool_call_id=call["id"],
+                    )
+                )
+
+            continue
+
+        final_llm = ChatOpenAI(
+            model=LLM_MODEL,
+            temperature=0,
+            api_key=OPENAI_API_KEY,
+            streaming=True,
+        )
+
+        final_messages = messages[:-1]
+
+        for chunk in final_llm.stream(final_messages):
+            token = chunk.content
+            if token:
+                yield token
+
+        return
+
+    yield "I could not complete the answer because maximum tool iterations were reached."

@@ -9,9 +9,9 @@ async function sendMessage() {
     appendMessage(message, "user");
     input.value = "";
 
-    appendMessage("Thinking... 🎀", "bot", "loading-message");
+    const botMessage = appendMessage("", "bot");
 
-    const response = await fetch("/chat", {
+    const response = await fetch("/chat-stream", {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
@@ -19,12 +19,21 @@ async function sendMessage() {
         body: JSON.stringify({ message })
     });
 
-    const data = await response.json();
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder("utf-8");
 
-    const loading = document.getElementById("loading-message");
-    if (loading) loading.remove();
+    let fullText = "";
 
-    appendMessage(data.response, "bot");
+    while (true) {
+        const { value, done } = await reader.read();
+
+        if (done) break;
+
+        const chunk = decoder.decode(value, { stream: true });
+        fullText += chunk;
+        botMessage.innerText = fullText;
+        chatBox.scrollTop = chatBox.scrollHeight;
+    }
 }
 
 function appendMessage(text, role, id = null) {
@@ -40,6 +49,8 @@ function appendMessage(text, role, id = null) {
 
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
+
+    return div;
 }
 
 document.getElementById("message-input").addEventListener("keydown", function(event) {
