@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
+from random import randint
 
 from rag_agent.generator import generator_agent, generator_agent_stream, classify_query_intent
 from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query, is_gibberish_query
@@ -96,9 +97,13 @@ async def chat_stream(request: Request):
     intent_result = classify_query_intent(user_message)
 
     if intent_result.get("is_gibberish"):
+
+        random_pick = ['sugar', 'ice-cream', 'birthday cake']
+        picker = randint(0,2)
+
         joke = (
             "👶 Oops! My baby brain couldn't understand that. "
-            "Maybe I need more birthday cake 🎂😄\n\n"
+            f"Maybe I need more {random_pick[picker]} 🎂😄\n\n"
             "Could you please type your question again?"
         )
 
