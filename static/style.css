@@ -1,30 +1,42 @@
+html,
+body {
+    height: 100%;
+    margin: 0;
+}
+
 body {
     font-family: Arial, sans-serif;
     background: #fff4f7;
-    margin: 0;
-    padding: 0;
 }
 
 .chat-container {
+    width: 100%;
     max-width: 720px;
-    margin: 40px auto;
+    min-height: 100dvh;
+    margin: 0 auto;
     background: white;
     border-radius: 16px;
     padding: 24px;
     box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
 }
 
 h1 {
     text-align: center;
+    margin: 0 0 16px 0;
 }
 
 .chat-box {
-    height: 480px;
+    flex: 1;
     overflow-y: auto;
     border: 1px solid #eee;
     padding: 16px;
     border-radius: 12px;
     background: #fafafa;
+    min-height: 0;
 }
 
 .message {
@@ -32,6 +44,8 @@ h1 {
     padding: 10px 14px;
     border-radius: 12px;
     max-width: 80%;
+    word-wrap: break-word;
+    white-space: pre-wrap;
 }
 
 .user {
@@ -41,36 +55,6 @@ h1 {
 
 .bot {
     background: #ffe4ec;
-    margin-right: auto;
-}
-
-.input-area {
-    display: flex;
-    gap: 8px;
-    margin-top: 16px;
-}
-
-input {
-    flex: 1;
-    padding: 12px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-}
-
-button {
-    padding: 12px 20px;
-    border: none;
-    border-radius: 8px;
-    background: #ff6b9a;
-    color: white;
-    cursor: pointer;
-}
-
-.thinking {
-    background: #f3f4f6;
-    color: #6b7280;
-    font-style: italic;
-    border: 1px dashed #d1d5db;
     margin-right: auto;
 }
 
@@ -87,4 +71,60 @@ button {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
     margin-right: auto;
     opacity: 0.85;
+}
+
+.input-area {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+input {
+    flex: 1;
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    min-width: 0;
+}
+
+button {
+    padding: 12px 20px;
+    border: none;
+    border-radius: 8px;
+    background: #ff6b9a;
+    color: white;
+    cursor: pointer;
+}
+
+@media (max-width: 768px) {
+    .chat-container {
+        max-width: 100%;
+        min-height: 100dvh;
+        border-radius: 0;
+        padding: 12px;
+        margin: 0;
+        box-shadow: none;
+    }
+
+    h1 {
+        font-size: 18px;
+        margin-bottom: 12px;
+    }
+
+    .chat-box {
+        padding: 10px;
+    }
+
+    .message {
+        max-width: 88%;
+        font-size: 14px;
+    }
+
+    .input-area {
+        margin-top: 10px;
+    }
+
+    button {
+        padding: 12px 14px;
+    }
 }
