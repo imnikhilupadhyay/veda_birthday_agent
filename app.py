@@ -94,27 +94,6 @@ async def chat_stream(request: Request):
     body = await request.json()
     user_message = body.get("message", "").strip()
 
-    intent_result = classify_query_intent(user_message)
-
-    if intent_result.get("is_gibberish"):
-
-        random_pick = ['sugar', 'ice-cream', 'birthday cake']
-        picker = randint(0,2)
-
-        joke = (
-            "👶 Oops! My baby brain couldn't understand that. "
-            f"Maybe I need more {random_pick[picker]} 🎂😄\n\n"
-            "Could you please type your question again?"
-        )
-
-        return StreamingResponse(
-            iter([
-                json.dumps({"type": "answer_start", "content": ""}) + "\n",
-                json.dumps({"type": "token", "content": joke}) + "\n",
-            ]),
-            media_type="application/x-ndjson",
-        )
-
     if not user_message:
         return StreamingResponse(
             iter([json.dumps({
@@ -130,18 +109,33 @@ async def chat_stream(request: Request):
         thread_id = str(uuid.uuid4())
 
     history = get_history(thread_id, limit=MAX_HISTORY_MESSAGES)
-
     profile = get_user_profile(thread_id)
 
     extracted_profile = extract_user_profile_from_query(user_message)
 
-    print("USER MESSAGE:", user_message, flush=True)
-    print("EXTRACTED PROFILE:", extracted_profile, flush=True)
-    print("THREAD ID:", thread_id, flush=True)
-
     if extracted_profile.get("name"):
         upsert_user_name(thread_id, extracted_profile["name"])
         profile["name"] = extracted_profile["name"]
+
+    intent_result = classify_query_intent(user_message)
+
+    if intent_result.get("is_gibberish"):
+        random_pick = ["sugar", "ice-cream", "birthday cake"]
+        picker = randint(0, 2)
+
+        joke = (
+            "👶 Oops! My baby brain couldn't understand that. "
+            f"Maybe I need more {random_pick[picker]} 🎂😄\n\n"
+            "Could you please type your question again?"
+        )
+
+        return StreamingResponse(
+            iter([
+                json.dumps({"type": "answer_start", "content": ""}) + "\n",
+                json.dumps({"type": "token", "content": joke}) + "\n",
+            ]),
+            media_type="application/x-ndjson",
+        )
 
     def stream_response():
         full_response = ""
@@ -162,15 +156,8 @@ async def chat_stream(request: Request):
             if not token_sent:
                 fallback = "I don't know based on the available birthday information."
 
-                yield json.dumps({
-                    "type": "answer_start",
-                    "content": ""
-                }) + "\n"
-
-                yield json.dumps({
-                    "type": "token",
-                    "content": fallback
-                }) + "\n"
+                yield json.dumps({"type": "answer_start", "content": ""}) + "\n"
+                yield json.dumps({"type": "token", "content": fallback}) + "\n"
 
                 full_response = fallback
 

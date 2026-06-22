@@ -81,6 +81,9 @@ Rules:
 - cake means cake-related question.
 - general means a normal understandable query that does not fit above.
 - is_gibberish should be true only for random/meaningless text.
+- User self-introductions are NOT gibberish.
+- Messages like "I am Nikhil", "I'm Nikhil", "my name is Nikhil", "this is Nikhil" are NOT gibberish.
+- Even if the message is not birthday-related, if it is understandable English, it is NOT gibberish.
 
 Examples:
 "venue" -> {{"is_gibberish": false, "intent": "location"}}
@@ -93,6 +96,9 @@ Examples:
 "cake" -> {{"is_gibberish": false, "intent": "cake"}}
 "abcd" -> {{"is_gibberish": true, "intent": "general"}}
 "1234" -> {{"is_gibberish": true, "intent": "general"}}
+"I am Nikhil" -> {{"is_gibberish": false, "intent": "general"}}
+"I'm Rahul" -> {{"is_gibberish": false, "intent": "general"}}
+"my name is Priya" -> {{"is_gibberish": false, "intent": "general"}}
 """
         ),
         ("human", "Message: {user_message}\nJSON:")
