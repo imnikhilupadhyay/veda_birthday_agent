@@ -20,6 +20,83 @@ from rag_agent.prompts import RAG_PROMPT
 
 tool_manager = RAGChain()
 
+QUERY_EXPANSIONS = {
+    "venue": "Where is the birthday celebration taking place?",
+    "location": "Where is the birthday celebration taking place?",
+    "place": "Where is the birthday celebration taking place?",
+    "where": "Where is the birthday celebration taking place?",
+    "time": "What time does the birthday party start?",
+    "timing": "What time does the birthday party start?",
+    "date": "When is Veda's birthday?",
+    "address": "What is the address of the birthday celebration?",
+    "theme": "What is the theme of the birthday party?",
+    "cake": "What kind of cake will be served at the birthday party?",
+}
+
+def normalize_user_query(question: str) -> str:
+    cleaned = question.strip().lower()
+    cleaned = cleaned.strip("?.! ")
+    cleaned = " ".join(cleaned.split())
+
+    if cleaned in QUERY_EXPANSIONS:
+        expanded = QUERY_EXPANSIONS[cleaned]
+        print(f"Query expanded: '{question}' -> '{expanded}'", flush=True)
+        return expanded
+
+    return question
+
+def is_gibberish_query(user_message: str) -> bool:
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+You classify whether a user message is gibberish or not.
+
+Return ONLY valid JSON.
+
+JSON format:
+{{
+  "is_gibberish": true
+}}
+
+Rules:
+- Gibberish means random characters, meaningless text, accidental typing, only numbers, or text with no understandable intent.
+- Birthday-related short queries are NOT gibberish.
+- Examples of NOT gibberish:
+  - "venue"
+  - "time"
+  - "date"
+  - "cake"
+  - "where"
+  - "when"
+  - "what is her birthday?"
+  - "my name is Rahul"
+- Examples of gibberish:
+  - "abcd"
+  - "1234"
+  - "asdfgh"
+  - "qwerty"
+  - "zzzz"
+  - "ajskdjas"
+"""
+        ),
+        ("human", "Message: {user_message}\nJSON:")
+    ])
+
+    chain = prompt | llm | JsonOutputParser()
+
+    try:
+        result = chain.invoke({"user_message": user_message})
+        return bool(result.get("is_gibberish", False))
+    except Exception as e:
+        print("GIBBERISH CLASSIFICATION ERROR:", e, flush=True)
+        return False
 
 def convert_history_to_messages(history: list | None):
     messages = []
@@ -116,6 +193,8 @@ def generator_agent(question: str, history: list | None = None) -> str:
 
     if not question:
         return "Please ask me something about Veda's birthday."
+    
+    expanded_question = normalize_user_query(question)
 
     generator_llm = ChatOpenAI(
         model=LLM_MODEL,
@@ -132,7 +211,7 @@ def generator_agent(question: str, history: list | None = None) -> str:
 
     messages = [SystemMessage(content=RAG_PROMPT)]
     messages.extend(conversation_messages)
-    messages.append(HumanMessage(content=question))
+    messages.append(HumanMessage(content=expanded_question))
 
     last_response_content = ""
 
@@ -175,7 +254,11 @@ def generator_agent(question: str, history: list | None = None) -> str:
     return last_response_content or "I could not complete the answer because maximum tool iterations were reached."
 
 
-def generator_agent_stream(question: str, history: list | None = None, user_profile: dict | None = None):
+def generator_agent_stream(
+    question: str,
+    history: list | None = None,
+    user_profile: dict | None = None,
+):
     """Streaming agent that yields UI events as dictionaries."""
 
     if not question:
@@ -185,6 +268,14 @@ def generator_agent_stream(question: str, history: list | None = None, user_prof
         }
         return
 
+    expanded_question = normalize_user_query(question)
+
+    if expanded_question != question:
+        yield {
+            "type": "thinking_update",
+            "content": f"Thinking... {expanded_question}...",
+        }
+
     generator_llm = ChatOpenAI(
         model=LLM_MODEL,
         temperature=0,
@@ -193,7 +284,6 @@ def generator_agent_stream(question: str, history: list | None = None, user_prof
 
     tools = tool_manager.get_tools()
     tool_definition = tool_schema_manager(tools)
-
     generator_llm_with_tools = generator_llm.bind_tools(tool_definition)
 
     conversation_messages = convert_history_to_messages(history)
@@ -208,12 +298,11 @@ def generator_agent_stream(question: str, history: list | None = None, user_prof
         )
 
     messages.extend(conversation_messages)
-    messages.append(HumanMessage(content=question))
+    messages.append(HumanMessage(content=expanded_question))
 
     for _ in range(4):
         response = generator_llm_with_tools.invoke(messages)
 
-        # If model wants tools, append full response with tool_calls
         if response.tool_calls:
             messages.append(response)
 
@@ -227,11 +316,19 @@ def generator_agent_stream(question: str, history: list | None = None, user_prof
                 print(f"Calling tool: {tool_name}", flush=True)
                 print(f"Args: {args}", flush=True)
 
+                # Important:
+                # If model passes original/weak input, override it with expanded_question
+                if tool_name == "similar_questions":
+                    args["input"] = expanded_question
+
+                if tool_name == "condense_question":
+                    args["question"] = expanded_question
+
                 tool_output = _execute_tool(
                     tool_name=tool_name,
                     args=args,
                     tools=tools,
-                    question=question,
+                    question=expanded_question,
                     conversation_messages=conversation_messages,
                 )
 
@@ -240,97 +337,10 @@ def generator_agent_stream(question: str, history: list | None = None, user_prof
                         "type": "thinking_update",
                         "content": f"Thinking... {tool_output}...",
                     }
-
-                messages.append(
-                    ToolMessage(
-                        name=tool_name,
-                        content=str(tool_output),
-                        tool_call_id=call["id"],
-                    )
-                )
-
-            continue
-
-        # No tool calls: now stream final answer.
-        # Important: do NOT append response before streaming,
-        # otherwise you may stream based on an already-empty/final response.
-        yield {"type": "answer_start", "content": ""}
-
-        final_llm = ChatOpenAI(
-            model=LLM_MODEL,
-            temperature=0,
-            api_key=OPENAI_API_KEY,
-            streaming=True,
-        )
-
-        for chunk in final_llm.stream(messages):
-            token = chunk.content
-
-            if token:
-                yield {
-                    "type": "token",
-                    "content": token,
-                }
-
-        return
-
-    yield {
-        "type": "token",
-        "content": "I could not complete the answer because maximum tool iterations were reached.",
-    }
-    """Streaming agent that yields UI events as dictionaries."""
-
-    if not question:
-        yield {
-            "type": "token",
-            "content": "Please ask me something about Veda's birthday.",
-        }
-        return
-
-    generator_llm = ChatOpenAI(
-        model=LLM_MODEL,
-        temperature=0,
-        api_key=OPENAI_API_KEY,
-    )
-
-    tools = tool_manager.get_tools()
-    tool_definition = tool_schema_manager(tools)
-
-    generator_llm_with_tools = generator_llm.bind_tools(tool_definition)
-
-    conversation_messages = convert_history_to_messages(history)
-
-    messages = [SystemMessage(content=RAG_PROMPT)]
-    messages.extend(conversation_messages)
-    messages.append(HumanMessage(content=question))
-
-    for _ in range(4):
-        response = generator_llm_with_tools.invoke(messages)
-        messages.append(response)
-
-        if response.tool_calls:
-            tool_names = [tool_call["name"] for tool_call in response.tool_calls]
-            print(f"Chaining Tools -> {' | '.join(tool_names)}", flush=True)
-
-            for call in response.tool_calls:
-                tool_name = call["name"]
-                args = call.get("args", {})
-
-                print(f"Calling tool: {tool_name}", flush=True)
-                print(f"Args: {args}", flush=True)
-
-                tool_output = _execute_tool(
-                    tool_name=tool_name,
-                    args=args,
-                    tools=tools,
-                    question=question,
-                    conversation_messages=conversation_messages,
-                )
-
-                if tool_name == "condense_question":
+                elif tool_name == "similar_questions":
                     yield {
                         "type": "thinking_update",
-                        "content": f"Thinking... {tool_output}...",
+                        "content": "Searching Veda's birthday memories... 🎂"
                     }
 
                 messages.append(
@@ -367,7 +377,6 @@ def generator_agent_stream(question: str, history: list | None = None, user_prof
         "type": "token",
         "content": "I could not complete the answer because maximum tool iterations were reached.",
     }
-
 def extract_user_profile_from_query(user_message: str) -> dict:
     llm = ChatOpenAI(
         model=LLM_MODEL,

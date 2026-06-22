@@ -3,6 +3,19 @@ window.addEventListener("DOMContentLoaded", () => {
     appendMessage(greeting, "bot");
 });
 
+function appendErrorMessage(text) {
+    const chatBox = document.getElementById("chat-box");
+
+    const div = document.createElement("div");
+    div.className = "message error-message";
+    div.innerText = text;
+
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+
+    return div;
+}
+
 async function sendMessage() {
     const input = document.getElementById("message-input");
     const chatBox = document.getElementById("chat-box");
@@ -50,7 +63,7 @@ async function sendMessage() {
                 }
             }
 
-            if (event.type === "thinking_update") {
+            else if (event.type === "thinking_update") {
                 if (!thinkingBox) {
                     thinkingBox = appendThinkingBox(event.content);
                 } else {
@@ -58,12 +71,12 @@ async function sendMessage() {
                 }
             }
 
-            if (event.type === "answer_start") {
+            else if (event.type === "answer_start") {
                 // Do nothing here.
-                // Keep the soft thinking box visible until the first token arrives.
+                // Keep thinking box visible until first token arrives.
             }
 
-            if (event.type === "token") {
+            else if (event.type === "token") {
                 if (thinkingBox) {
                     thinkingBox.remove();
                     thinkingBox = null;
@@ -77,11 +90,26 @@ async function sendMessage() {
                 botMessage.innerText = fullText;
                 chatBox.scrollTop = chatBox.scrollHeight;
             }
+
+            else if (event.type === "error") {
+                if (thinkingBox) {
+                    thinkingBox.remove();
+                    thinkingBox = null;
+                }
+
+                appendErrorMessage("ⓘ " + event.content);
+            }
         }
     }
 
-    if (thinkingBox) {
+    if (!botMessage && thinkingBox) {
         thinkingBox.remove();
+        thinkingBox = null;
+
+        appendMessage(
+            "I don't know based on the available birthday information.",
+            "bot"
+        );
     }
 }
 

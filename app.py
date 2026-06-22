@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 
 from rag_agent.generator import generator_agent, generator_agent_stream
-from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query
+from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query, is_gibberish_query
 from rag_agent.history_store import (
     init_db,
     get_history,
@@ -93,6 +93,21 @@ async def chat_stream(request: Request):
     body = await request.json()
     user_message = body.get("message", "").strip()
 
+    if is_gibberish_query(user_message):
+        joke = (
+            "👶 Oops! My baby brain couldn't understand that. "
+            "Maybe I need more birthday cake 🎂😄\n\n"
+            "Could you please type your question again?"
+        )
+
+        return StreamingResponse(
+            iter([
+                json.dumps({"type": "answer_start", "content": ""}) + "\n",
+                json.dumps({"type": "token", "content": joke}) + "\n",
+            ]),
+            media_type="application/x-ndjson",
+        )
+
     if not user_message:
         return StreamingResponse(
             iter([json.dumps({
@@ -123,19 +138,45 @@ async def chat_stream(request: Request):
 
     def stream_response():
         full_response = ""
+        token_sent = False
 
-        for event in generator_agent_stream(
-            question=user_message,
-            history=history,
-            user_profile=profile,
-        ):
-            if event["type"] == "token":
-                full_response += event["content"]
+        try:
+            for event in generator_agent_stream(
+                question=user_message,
+                history=history,
+                user_profile=profile,
+            ):
+                if event.get("type") == "token" and event.get("content"):
+                    token_sent = True
+                    full_response += event["content"]
 
-            yield json.dumps(event) + "\n"
+                yield json.dumps(event) + "\n"
 
-        save_message(thread_id, "user", user_message)
-        save_message(thread_id, "assistant", full_response)
+            if not token_sent:
+                fallback = "I don't know based on the available birthday information."
+
+                yield json.dumps({
+                    "type": "answer_start",
+                    "content": ""
+                }) + "\n"
+
+                yield json.dumps({
+                    "type": "token",
+                    "content": fallback
+                }) + "\n"
+
+                full_response = fallback
+
+            save_message(thread_id, "user", user_message)
+            save_message(thread_id, "assistant", full_response)
+
+        except Exception as e:
+            print("STREAM ERROR:", str(e), flush=True)
+
+            yield json.dumps({
+                "type": "error",
+                "content": "Some error occurred. Please try again in some time."
+            }) + "\n"
 
     response = StreamingResponse(
         stream_response(),
