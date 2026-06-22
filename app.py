@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 
-from rag_agent.generator import generator_agent, generator_agent_stream
+from rag_agent.generator import generator_agent, generator_agent_stream, classify_query_intent
 from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query, is_gibberish_query
 from rag_agent.history_store import (
     init_db,
@@ -93,7 +93,9 @@ async def chat_stream(request: Request):
     body = await request.json()
     user_message = body.get("message", "").strip()
 
-    if is_gibberish_query(user_message):
+    intent_result = classify_query_intent(user_message)
+
+    if intent_result.get("is_gibberish"):
         joke = (
             "👶 Oops! My baby brain couldn't understand that. "
             "Maybe I need more birthday cake 🎂😄\n\n"

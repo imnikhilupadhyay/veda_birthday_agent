@@ -33,18 +33,97 @@ QUERY_EXPANSIONS = {
     "cake": "What kind of cake will be served at the birthday party?",
 }
 
-def normalize_user_query(question: str) -> str:
-    cleaned = question.strip().lower()
-    cleaned = cleaned.strip("?.! ")
-    cleaned = " ".join(cleaned.split())
+INTENT_TO_QUESTION = {
+    "location": "Where is the birthday celebration taking place?",
+    "time": "What time does the birthday party start?",
+    "date": "When is Veda's birthday?",
+    "address": "What is the address of the birthday celebration?",
+    "theme": "What is the theme of the birthday party?",
+    "cake": "What kind of cake will be served at the birthday party?",
+}
 
-    if cleaned in QUERY_EXPANSIONS:
-        expanded = QUERY_EXPANSIONS[cleaned]
-        print(f"Query expanded: '{question}' -> '{expanded}'", flush=True)
+def classify_query_intent(user_message: str) -> dict:
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+You classify a user's birthday-agent query.
+
+Return ONLY valid JSON.
+
+JSON format:
+{{
+  "is_gibberish": false,
+  "intent": "general"
+}}
+
+Allowed intents:
+- location
+- time
+- date
+- address
+- theme
+- cake
+- general
+
+Rules:
+- location means venue/place/where the party is happening.
+- time means start time/timing.
+- date means birthday date or celebration date.
+- address means full address.
+- theme means party theme.
+- cake means cake-related question.
+- general means a normal understandable query that does not fit above.
+- is_gibberish should be true only for random/meaningless text.
+
+Examples:
+"venue" -> {{"is_gibberish": false, "intent": "location"}}
+"where is the party at" -> {{"is_gibberish": false, "intent": "location"}}
+"where are we meeting" -> {{"is_gibberish": false, "intent": "location"}}
+"where should i come" -> {{"is_gibberish": false, "intent": "location"}}
+"party location" -> {{"is_gibberish": false, "intent": "location"}}
+"time" -> {{"is_gibberish": false, "intent": "time"}}
+"when should we come" -> {{"is_gibberish": false, "intent": "time"}}
+"cake" -> {{"is_gibberish": false, "intent": "cake"}}
+"abcd" -> {{"is_gibberish": true, "intent": "general"}}
+"1234" -> {{"is_gibberish": true, "intent": "general"}}
+"""
+        ),
+        ("human", "Message: {user_message}\nJSON:")
+    ])
+
+    chain = prompt | llm | JsonOutputParser()
+
+    try:
+        result = chain.invoke({"user_message": user_message})
+        return {
+            "is_gibberish": bool(result.get("is_gibberish", False)),
+            "intent": result.get("intent", "general"),
+        }
+    except Exception as e:
+        print("INTENT CLASSIFICATION ERROR:", e, flush=True)
+        return {"is_gibberish": False, "intent": "general"}
+
+def normalize_user_query(question: str) -> str:
+    result = classify_query_intent(question)
+
+    if result.get("is_gibberish"):
+        return question
+
+    intent = result.get("intent", "general")
+
+    if intent in INTENT_TO_QUESTION:
+        expanded = INTENT_TO_QUESTION[intent]
+        print(f"Intent normalized: '{question}' -> '{expanded}'", flush=True)
         return expanded
 
     return question
-
 def is_gibberish_query(user_message: str) -> bool:
     llm = ChatOpenAI(
         model=LLM_MODEL,
