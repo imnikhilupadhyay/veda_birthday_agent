@@ -3,7 +3,7 @@
 __pycache__/
 *.pyc
 
-veda_qa.json
+*.json
 
 run_local.py
 

@@ -152,11 +152,11 @@ async def chat_stream(request: Request):
 
     return response
 
-# @app.get("/clear-session")
-# def clear_session():
-#     response = RedirectResponse(url="/")
-#     response.delete_cookie(COOKIE_NAME)
-#     return response
+@app.get("/clear-session")
+def clear_session():
+    response = RedirectResponse(url="/")
+    response.delete_cookie(COOKIE_NAME)
+    return response
 
 # @app.get("/debug-cookie")
 # def debug_cookie(request: Request):
