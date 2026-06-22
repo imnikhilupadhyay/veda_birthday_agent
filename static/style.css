@@ -65,3 +65,26 @@ button {
     color: white;
     cursor: pointer;
 }
+
+.thinking {
+    background: #f3f4f6;
+    color: #6b7280;
+    font-style: italic;
+    border: 1px dashed #d1d5db;
+    margin-right: auto;
+}
+
+.thinking-shadow {
+    margin: 8px 0;
+    padding: 8px 12px;
+    max-width: 70%;
+    font-size: 13px;
+    font-style: italic;
+    color: #6b7280;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px dashed #e5e7eb;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    margin-right: auto;
+    opacity: 0.85;
+}

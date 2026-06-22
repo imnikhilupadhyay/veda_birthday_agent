@@ -18,7 +18,7 @@ from rag_agent.prompts import RAG_PROMPT
 tool_manager = RAGChain()
 
 
-def convert_history_to_messages(history: list):
+def convert_history_to_messages(history: list | None):
     messages = []
 
     if not history:
@@ -40,15 +40,6 @@ def convert_history_to_messages(history: list):
             elif role == "assistant":
                 messages.append(AIMessage(content=str(content)))
 
-        elif isinstance(item, (list, tuple)) and len(item) == 2:
-            user_msg, assistant_msg = item
-
-            if user_msg:
-                messages.append(HumanMessage(content=str(user_msg)))
-
-            if assistant_msg:
-                messages.append(AIMessage(content=str(assistant_msg)))
-
     return messages
 
 
@@ -63,11 +54,7 @@ def tool_schema_manager(tools) -> List[dict]:
                     "question": {
                         "type": "string",
                         "description": "The user's current question",
-                    },
-                    "conversation_history": {
-                        "type": "array",
-                        "description": "Conversation history",
-                    },
+                    }
                 },
                 "required": ["question"],
             }
@@ -97,7 +84,33 @@ def tool_schema_manager(tools) -> List[dict]:
     return tool_definitions
 
 
+def _get_tool_by_name(tools, tool_name: str):
+    for tool in tools:
+        if tool.name == tool_name:
+            return tool
+    return None
+
+
+def _execute_tool(tool_name: str, args: dict, tools, question: str, conversation_messages: list):
+    selected_tool = _get_tool_by_name(tools, tool_name)
+
+    if selected_tool is None:
+        return f"Tool {tool_name} not found."
+
+    if tool_name == "condense_question":
+        return selected_tool.invoke(
+            {
+                "question": args.get("question", question),
+                "conversation_history": conversation_messages,
+            }
+        )
+
+    return selected_tool.invoke(args.get("input", question))
+
+
 def generator_agent(question: str, history: list | None = None) -> str:
+    """Non-streaming fallback agent."""
+
     if not question:
         return "Please ask me something about Veda's birthday."
 
@@ -128,12 +141,7 @@ def generator_agent(question: str, history: list | None = None) -> str:
             last_response_content = response.content
 
         if not response.tool_calls:
-            final_response = response.content or last_response_content
-
-            if final_response:
-                return str(final_response)
-
-            return "Sorry, I could not generate a response."
+            return str(response.content or last_response_content or "Sorry, I could not generate a response.")
 
         tool_names = [tool_call["name"] for tool_call in response.tool_calls]
         print(f"Chaining Tools -> {' | '.join(tool_names)}", flush=True)
@@ -142,34 +150,16 @@ def generator_agent(question: str, history: list | None = None) -> str:
             tool_name = call["name"]
             args = call.get("args", {})
 
-            print(f"\n🔧 Calling tool: {tool_name}", flush=True)
-            print(f"   Args: {args}", flush=True)
+            print(f"Calling tool: {tool_name}", flush=True)
+            print(f"Args: {args}", flush=True)
 
-            selected_tool = None
-
-            for tool in tools:
-                if tool.name == tool_name:
-                    selected_tool = tool
-                    break
-
-            if selected_tool is None:
-                tool_output = f"Tool {tool_name} not found."
-
-            elif tool_name == "condense_question":
-                tool_output = selected_tool.invoke(
-                    {
-                        "question": args.get("question", question),
-                        "conversation_history": conversation_messages,
-                    }
-                )
-
-            else:
-                tool_output = selected_tool.invoke(
-                    args.get("input", question)
-                )
-
-            if tool_output is None:
-                tool_output = "No output from tool."
+            tool_output = _execute_tool(
+                tool_name=tool_name,
+                args=args,
+                tools=tools,
+                question=question,
+                conversation_messages=conversation_messages,
+            )
 
             messages.append(
                 ToolMessage(
@@ -179,25 +169,28 @@ def generator_agent(question: str, history: list | None = None) -> str:
                 )
             )
 
-    return (
-        last_response_content
-        or "I could not complete the answer because maximum tool iterations were reached."
-    )
+    return last_response_content or "I could not complete the answer because maximum tool iterations were reached."
+
 
 def generator_agent_stream(question: str, history: list | None = None):
+    """Streaming agent that yields UI events as dictionaries."""
+
     if not question:
-        yield "Please ask me something about Veda's birthday."
+        yield {
+            "type": "token",
+            "content": "Please ask me something about Veda's birthday.",
+        }
         return
 
     generator_llm = ChatOpenAI(
         model=LLM_MODEL,
         temperature=0,
         api_key=OPENAI_API_KEY,
-        streaming=True,
     )
 
     tools = tool_manager.get_tools()
     tool_definition = tool_schema_manager(tools)
+
     generator_llm_with_tools = generator_llm.bind_tools(tool_definition)
 
     conversation_messages = convert_history_to_messages(history)
@@ -218,23 +211,22 @@ def generator_agent_stream(question: str, history: list | None = None):
                 tool_name = call["name"]
                 args = call.get("args", {})
 
-                selected_tool = None
-                for tool in tools:
-                    if tool.name == tool_name:
-                        selected_tool = tool
-                        break
+                print(f"Calling tool: {tool_name}", flush=True)
+                print(f"Args: {args}", flush=True)
 
-                if selected_tool is None:
-                    tool_output = f"Tool {tool_name} not found."
+                tool_output = _execute_tool(
+                    tool_name=tool_name,
+                    args=args,
+                    tools=tools,
+                    question=question,
+                    conversation_messages=conversation_messages,
+                )
 
-                elif tool_name == "condense_question":
-                    tool_output = selected_tool.invoke({
-                        "question": args.get("question", question),
-                        "conversation_history": conversation_messages,
-                    })
-
-                else:
-                    tool_output = selected_tool.invoke(args.get("input", question))
+                if tool_name == "condense_question":
+                    yield {
+                        "type": "thinking_update",
+                        "content": f"Thinking... {tool_output}...",
+                    }
 
                 messages.append(
                     ToolMessage(
@@ -246,6 +238,8 @@ def generator_agent_stream(question: str, history: list | None = None):
 
             continue
 
+        yield {"type": "answer_start", "content": ""}
+
         final_llm = ChatOpenAI(
             model=LLM_MODEL,
             temperature=0,
@@ -253,13 +247,18 @@ def generator_agent_stream(question: str, history: list | None = None):
             streaming=True,
         )
 
-        final_messages = messages[:-1]
-
-        for chunk in final_llm.stream(final_messages):
+        for chunk in final_llm.stream(messages):
             token = chunk.content
+
             if token:
-                yield token
+                yield {
+                    "type": "token",
+                    "content": token,
+                }
 
         return
 
-    yield "I could not complete the answer because maximum tool iterations were reached."
+    yield {
+        "type": "token",
+        "content": "I could not complete the answer because maximum tool iterations were reached.",
+    }

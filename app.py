@@ -1,6 +1,6 @@
 import os
 import uuid
-
+import json
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -73,8 +73,11 @@ async def chat_stream(request: Request):
 
     if not user_message:
         return StreamingResponse(
-            iter(["Please ask me something about Veda's birthday."]),
-            media_type="text/plain"
+            iter([json.dumps({
+                "type": "token",
+                "content": "Please ask me something about Veda's birthday."
+            }) + "\n"]),
+            media_type="application/x-ndjson"
         )
 
     thread_id = request.cookies.get("thread_id")
@@ -87,19 +90,21 @@ async def chat_stream(request: Request):
     def stream_response():
         full_response = ""
 
-        for token in generator_agent_stream(
+        for event in generator_agent_stream(
             question=user_message,
             history=history
         ):
-            full_response += token
-            yield token
+            if event["type"] == "token":
+                full_response += event["content"]
+
+            yield json.dumps(event) + "\n"
 
         save_message(thread_id, "user", user_message)
         save_message(thread_id, "assistant", full_response)
 
     response = StreamingResponse(
         stream_response(),
-        media_type="text/plain"
+        media_type="application/x-ndjson"
     )
 
     response.set_cookie(
@@ -111,7 +116,6 @@ async def chat_stream(request: Request):
     )
 
     return response
-
 
 @app.get("/health")
 def health():
