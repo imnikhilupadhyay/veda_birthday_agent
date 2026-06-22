@@ -113,6 +113,10 @@ async def chat_stream(request: Request):
 
     extracted_profile = extract_user_profile_from_query(user_message)
 
+    print("USER MESSAGE:", user_message, flush=True)
+    print("EXTRACTED PROFILE:", extracted_profile, flush=True)
+    print("THREAD ID:", thread_id, flush=True)
+
     if extracted_profile.get("name"):
         upsert_user_name(thread_id, extracted_profile["name"])
         profile["name"] = extracted_profile["name"]
@@ -148,11 +152,45 @@ async def chat_stream(request: Request):
 
     return response
 
-@app.get("/clear-session")
-def clear_session():
-    response = RedirectResponse(url="/")
-    response.delete_cookie(COOKIE_NAME)
-    return response
+# @app.get("/clear-session")
+# def clear_session():
+#     response = RedirectResponse(url="/")
+#     response.delete_cookie(COOKIE_NAME)
+#     return response
+
+# @app.get("/debug-cookie")
+# def debug_cookie(request: Request):
+#     return {
+#         "cookie": request.cookies.get(COOKIE_NAME)
+#     }
+
+# @app.get("/debug-profile")
+# def debug_profile(request: Request):
+#     thread_id = request.cookies.get(COOKIE_NAME)
+
+#     if not thread_id:
+#         return {"error": "no cookie"}
+
+#     return get_user_profile(thread_id)
+
+# @app.get("/debug-extract-name")
+# def debug_extract_name(message: str):
+#     return extract_user_profile_from_query(message)
+
+# @app.get("/debug-save-name")
+# def debug_save_name(request: Request):
+#     thread_id = request.cookies.get(COOKIE_NAME)
+
+#     if not thread_id:
+#         return {"error": "no cookie"}
+
+#     upsert_user_name(thread_id, "Rahul")
+
+#     return {
+#         "thread_id": thread_id,
+#         "profile": get_user_profile(thread_id)
+#     }
+
 
 @app.get("/health")
 def health():

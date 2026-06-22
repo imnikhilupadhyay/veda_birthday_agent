@@ -379,121 +379,57 @@ def extract_user_profile_from_query(user_message: str) -> dict:
         (
             "system",
             """
-Extract user profile information from the message.
+You extract the current user's name from a message.
 
-Return JSON only.
+Return ONLY valid JSON.
 
-Schema:
-{
-  "name": string | null
-}
+JSON format:
+{{
+  "name": null
+}}
 
 Rules:
-- Extract the user's name only if the user explicitly tells their own name.
+- Extract the name only when the speaker explicitly introduces themselves.
+- If the speaker says "my name is X", extract X.
+- If the speaker says "I am X", extract X only when it is clearly an introduction.
+- If the speaker says "this is X", extract X only when it is clearly an introduction.
+- A message may contain both introduction and another question.
 - Do not extract names of other people.
 - Do not guess.
-- Normalize name in title case.
+- If no current-user name is provided, return {{"name": null}}.
 
 Examples:
-"Hi, my name is Rahul" -> {"name": "Rahul"}
-"I am Rahul" -> {"name": "Rahul"}
-"This is Rahul" -> {"name": "Rahul"}
-"Myself Rahul" -> {"name": "Rahul"}
-"what is my name?" -> {"name": null}
-"Who is Veda's father?" -> {"name": null}
+Message: Hi, my name is Rahul. When is her birthday?
+JSON: {{"name": "Rahul"}}
+
+Message: Hello, I am Priya. Can you help me?
+JSON: {{"name": "Priya"}}
+
+Message: This is Amit.
+JSON: {{"name": "Amit"}}
+
+Message: what is my name?
+JSON: {{"name": null}}
+
+Message: Who is Veda's father?
+JSON: {{"name": null}}
 """
         ),
-        ("human", "{user_message}")
+        ("human", "Message: {user_message}\nJSON:")
     ])
 
     chain = prompt | llm | JsonOutputParser()
 
     try:
         result = chain.invoke({"user_message": user_message})
-        return result or {"name": None}
-    except Exception:
+        name = result.get("name")
+
+        if isinstance(name, str) and name.strip():
+            return {"name": name.strip().title()}
+
         return {"name": None}
-    llm = ChatOpenAI(
-        model=LLM_MODEL,
-        temperature=0,
-        api_key=OPENAI_API_KEY,
-    )
 
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """
-Extract user profile information from the message.
-
-Return JSON only.
-
-Schema:
-{
-  "name": string | null
-}
-
-Rules:
-- Extract the user's name only if the user explicitly tells their name.
-- Do not extract names of other people.
-- Do not guess.
-- Normalize the name in title case.
-
-Examples:
-"Hi, my name is Rahul" -> {"name": "Rahul"}
-"I am Rahul" -> {"name": "Rahul"}
-"This is Rahul" -> {"name": "Rahul"}
-"Myself Rahul" -> {"name": "Rahul"}
-"what is my name?" -> {"name": null}
-"Who is Veda's father?" -> {"name": null}
-"""
-        ),
-        ("human", "{user_message}")
-    ])
-
-    chain = prompt | llm | JsonOutputParser()
-
-    try:
-        result = chain.invoke({"user_message": user_message})
-        return result or {"name": None}
-    except Exception:
+    except Exception as e:
+        print("PROFILE EXTRACTION ERROR:", e, flush=True)
         return {"name": None}
-    llm = ChatOpenAI(
-        model=LLM_MODEL,
-        temperature=0,
-        api_key=OPENAI_API_KEY,
-    )
-
-    prompt = ChatPromptTemplate.from_messages([
-        (
-            "system",
-            """
-Extract user profile information from the message.
-
-Return JSON only.
-
-Schema:
-{
-  "name": string | null
-}
-
-Rules:
-- Extract the user's name only if the user explicitly tells their name.
-- Examples:
-  "Hi, my name is Rahul" -> {"name": "Rahul"}
-  "I am Rahul" -> {"name": "Rahul"}
-  "This is Rahul" -> {"name": "Rahul"}
-  "what is my name?" -> {"name": null}
-  "Who is Veda's father?" -> {"name": null}
-- Do not guess.
-"""
-        ),
-        ("human", "{user_message}")
-    ])
-
-    chain = prompt | llm | JsonOutputParser()
-
-    try:
-        result = chain.invoke({"user_message": user_message})
-        return result or {"name": None}
-    except Exception:
-        return {"name": None}
+    
