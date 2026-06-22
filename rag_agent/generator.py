@@ -10,6 +10,9 @@ from langchain_core.messages import (
     ToolMessage,
 )
 
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.output_parsers import JsonOutputParser
+
 from rag_agent.config import LLM_MODEL, OPENAI_API_KEY
 from rag_agent.chain import RAGChain
 from rag_agent.prompts import RAG_PROMPT
@@ -172,7 +175,109 @@ def generator_agent(question: str, history: list | None = None) -> str:
     return last_response_content or "I could not complete the answer because maximum tool iterations were reached."
 
 
-def generator_agent_stream(question: str, history: list | None = None):
+def generator_agent_stream(question: str, history: list | None = None, user_profile: dict | None = None):
+    """Streaming agent that yields UI events as dictionaries."""
+
+    if not question:
+        yield {
+            "type": "token",
+            "content": "Please ask me something about Veda's birthday.",
+        }
+        return
+
+    generator_llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    )
+
+    tools = tool_manager.get_tools()
+    tool_definition = tool_schema_manager(tools)
+
+    generator_llm_with_tools = generator_llm.bind_tools(tool_definition)
+
+    conversation_messages = convert_history_to_messages(history)
+
+    messages = [SystemMessage(content=RAG_PROMPT)]
+
+    if user_profile and user_profile.get("name"):
+        messages.append(
+            SystemMessage(
+                content=f"The current user's name is {user_profile['name']}."
+            )
+        )
+
+    messages.extend(conversation_messages)
+    messages.append(HumanMessage(content=question))
+
+    for _ in range(4):
+        response = generator_llm_with_tools.invoke(messages)
+
+        # If model wants tools, append full response with tool_calls
+        if response.tool_calls:
+            messages.append(response)
+
+            tool_names = [tool_call["name"] for tool_call in response.tool_calls]
+            print(f"Chaining Tools -> {' | '.join(tool_names)}", flush=True)
+
+            for call in response.tool_calls:
+                tool_name = call["name"]
+                args = call.get("args", {})
+
+                print(f"Calling tool: {tool_name}", flush=True)
+                print(f"Args: {args}", flush=True)
+
+                tool_output = _execute_tool(
+                    tool_name=tool_name,
+                    args=args,
+                    tools=tools,
+                    question=question,
+                    conversation_messages=conversation_messages,
+                )
+
+                if tool_name == "condense_question":
+                    yield {
+                        "type": "thinking_update",
+                        "content": f"Thinking... {tool_output}...",
+                    }
+
+                messages.append(
+                    ToolMessage(
+                        name=tool_name,
+                        content=str(tool_output),
+                        tool_call_id=call["id"],
+                    )
+                )
+
+            continue
+
+        # No tool calls: now stream final answer.
+        # Important: do NOT append response before streaming,
+        # otherwise you may stream based on an already-empty/final response.
+        yield {"type": "answer_start", "content": ""}
+
+        final_llm = ChatOpenAI(
+            model=LLM_MODEL,
+            temperature=0,
+            api_key=OPENAI_API_KEY,
+            streaming=True,
+        )
+
+        for chunk in final_llm.stream(messages):
+            token = chunk.content
+
+            if token:
+                yield {
+                    "type": "token",
+                    "content": token,
+                }
+
+        return
+
+    yield {
+        "type": "token",
+        "content": "I could not complete the answer because maximum tool iterations were reached.",
+    }
     """Streaming agent that yields UI events as dictionaries."""
 
     if not question:
@@ -262,3 +367,89 @@ def generator_agent_stream(question: str, history: list | None = None):
         "type": "token",
         "content": "I could not complete the answer because maximum tool iterations were reached.",
     }
+
+def extract_user_profile_from_query(user_message: str) -> dict:
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+Extract user profile information from the message.
+
+Return JSON only.
+
+Schema:
+{
+  "name": string | null
+}
+
+Rules:
+- Extract the user's name only if the user explicitly tells their name.
+- Do not extract names of other people.
+- Do not guess.
+- Normalize the name in title case.
+
+Examples:
+"Hi, my name is Rahul" -> {"name": "Rahul"}
+"I am Rahul" -> {"name": "Rahul"}
+"This is Rahul" -> {"name": "Rahul"}
+"Myself Rahul" -> {"name": "Rahul"}
+"what is my name?" -> {"name": null}
+"Who is Veda's father?" -> {"name": null}
+"""
+        ),
+        ("human", "{user_message}")
+    ])
+
+    chain = prompt | llm | JsonOutputParser()
+
+    try:
+        result = chain.invoke({"user_message": user_message})
+        return result or {"name": None}
+    except Exception:
+        return {"name": None}
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+Extract user profile information from the message.
+
+Return JSON only.
+
+Schema:
+{
+  "name": string | null
+}
+
+Rules:
+- Extract the user's name only if the user explicitly tells their name.
+- Examples:
+  "Hi, my name is Rahul" -> {"name": "Rahul"}
+  "I am Rahul" -> {"name": "Rahul"}
+  "This is Rahul" -> {"name": "Rahul"}
+  "what is my name?" -> {"name": null}
+  "Who is Veda's father?" -> {"name": null}
+- Do not guess.
+"""
+        ),
+        ("human", "{user_message}")
+    ])
+
+    chain = prompt | llm | JsonOutputParser()
+
+    try:
+        result = chain.invoke({"user_message": user_message})
+        return result or {"name": None}
+    except Exception:
+        return {"name": None}

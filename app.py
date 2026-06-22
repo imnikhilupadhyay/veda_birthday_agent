@@ -5,9 +5,19 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import RedirectResponse
 
 from rag_agent.generator import generator_agent, generator_agent_stream
-from rag_agent.history_store import init_db, get_history, save_message
+from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query
+from rag_agent.history_store import (
+    init_db,
+    get_history,
+    save_message,
+    get_user_profile,
+    upsert_user_name,
+)
+from rag_agent.config import COOKIE_NAME, MAX_HISTORY_MESSAGES
+from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query
 
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 
@@ -21,9 +31,19 @@ init_db()
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
+    thread_id = request.cookies.get(COOKIE_NAME)
+
+    greeting = "Hi! How can I help you? 🎂"
+
+    if thread_id:
+        profile = get_user_profile(thread_id)
+        if profile.get("name"):
+            greeting = f"Hi {profile['name']}, good to see you again! How can I help you today? 🎂"
+
     return templates.TemplateResponse(
         request=request,
-        name="index.html"
+        name="index.html",
+        context={"greeting": greeting}
     )
 
 
@@ -37,12 +57,15 @@ async def chat(request: Request):
             "response": "Please ask me something about Veda's birthday."
         })
 
-    thread_id = request.cookies.get("thread_id")
+    thread_id = request.cookies.get(COOKIE_NAME)
 
     if not thread_id:
         thread_id = str(uuid.uuid4())
 
-    history = get_history(thread_id, limit=4)
+    history = get_history(
+        thread_id,
+        limit=MAX_HISTORY_MESSAGES
+    )
 
     assistant_response = generator_agent(
         question=user_message,
@@ -57,7 +80,7 @@ async def chat(request: Request):
     })
 
     response.set_cookie(
-        key="thread_id",
+        key=COOKIE_NAME,
         value=thread_id,
         httponly=True,
         max_age=60 * 60 * 24 * 30,
@@ -80,19 +103,28 @@ async def chat_stream(request: Request):
             media_type="application/x-ndjson"
         )
 
-    thread_id = request.cookies.get("thread_id")
+    thread_id = request.cookies.get(COOKIE_NAME)
 
     if not thread_id:
         thread_id = str(uuid.uuid4())
 
-    history = get_history(thread_id, limit=4)
+    history = get_history(thread_id, limit=MAX_HISTORY_MESSAGES)
+
+    profile = get_user_profile(thread_id)
+
+    extracted_profile = extract_user_profile_from_query(user_message)
+
+    if extracted_profile.get("name"):
+        upsert_user_name(thread_id, extracted_profile["name"])
+        profile["name"] = extracted_profile["name"]
 
     def stream_response():
         full_response = ""
 
         for event in generator_agent_stream(
             question=user_message,
-            history=history
+            history=history,
+            user_profile=profile,
         ):
             if event["type"] == "token":
                 full_response += event["content"]
@@ -108,13 +140,19 @@ async def chat_stream(request: Request):
     )
 
     response.set_cookie(
-        key="thread_id",
+        key=COOKIE_NAME,
         value=thread_id,
         httponly=True,
         max_age=60 * 60 * 24 * 30,
         samesite="lax"
     )
 
+    return response
+
+@app.get("/clear-session")
+def clear_session():
+    response = RedirectResponse(url="/")
+    response.delete_cookie(COOKIE_NAME)
     return response
 
 @app.get("/health")

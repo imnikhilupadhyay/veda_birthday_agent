@@ -1,5 +1,6 @@
 window.addEventListener("DOMContentLoaded", () => {
-    appendMessage("Hi! How can I help you? 🎂", "bot");
+    const greeting = document.body.dataset.greeting || "Hi! How can I help you? 🎂";
+    appendMessage(greeting, "bot");
 });
 
 async function sendMessage() {
