@@ -389,6 +389,50 @@ Schema:
 }
 
 Rules:
+- Extract the user's name only if the user explicitly tells their own name.
+- Do not extract names of other people.
+- Do not guess.
+- Normalize name in title case.
+
+Examples:
+"Hi, my name is Rahul" -> {"name": "Rahul"}
+"I am Rahul" -> {"name": "Rahul"}
+"This is Rahul" -> {"name": "Rahul"}
+"Myself Rahul" -> {"name": "Rahul"}
+"what is my name?" -> {"name": null}
+"Who is Veda's father?" -> {"name": null}
+"""
+        ),
+        ("human", "{user_message}")
+    ])
+
+    chain = prompt | llm | JsonOutputParser()
+
+    try:
+        result = chain.invoke({"user_message": user_message})
+        return result or {"name": None}
+    except Exception:
+        return {"name": None}
+    llm = ChatOpenAI(
+        model=LLM_MODEL,
+        temperature=0,
+        api_key=OPENAI_API_KEY,
+    )
+
+    prompt = ChatPromptTemplate.from_messages([
+        (
+            "system",
+            """
+Extract user profile information from the message.
+
+Return JSON only.
+
+Schema:
+{
+  "name": string | null
+}
+
+Rules:
 - Extract the user's name only if the user explicitly tells their name.
 - Do not extract names of other people.
 - Do not guess.

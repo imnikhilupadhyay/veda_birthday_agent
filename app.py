@@ -46,7 +46,6 @@ def home(request: Request):
         context={"greeting": greeting}
     )
 
-
 @app.post("/chat")
 async def chat(request: Request):
     body = await request.json()

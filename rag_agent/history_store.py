@@ -42,7 +42,6 @@ def get_history(thread_id: str, limit: int = 4):
         ).fetchall()
 
     rows.reverse()
-
     return [{"role": role, "content": content} for role, content in rows]
 
 
@@ -85,7 +84,7 @@ def get_user_profile(thread_id: str):
             (thread_id,),
         ).fetchone()
 
-    if not row:
+    if not row or not row[0]:
         return {}
 
     return {"name": row[0]}
