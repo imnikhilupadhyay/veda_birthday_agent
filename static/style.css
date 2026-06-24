@@ -194,3 +194,33 @@ button:hover {
         padding: 12px 14px;
     }
 }
+
+.suggestion-box {
+    margin: 10px 0;
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    max-width: 85%;
+}
+
+.suggestion-title {
+    font-size: 14px;
+    color: #374151;
+    margin-bottom: 8px;
+}
+
+.suggestion-button {
+    margin: 4px 6px 4px 0;
+    padding: 8px 12px;
+    border-radius: 999px;
+    border: 1px solid #ff9abb;
+    background: white;
+    color: #ff4f86;
+    cursor: pointer;
+    font-size: 14px;
+}
+
+.suggestion-button:hover {
+    background: #ffe4ec;
+}

@@ -8,8 +8,13 @@ from fastapi.templating import Jinja2Templates
 from fastapi.responses import RedirectResponse
 from random import randint
 
-from rag_agent.generator import generator_agent, generator_agent_stream, classify_query_intent
-from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query, is_gibberish_query
+from rag_agent.generator import (
+    generator_agent,
+    generator_agent_stream,
+    classify_query_intent,
+    extract_user_profile_from_query,
+    normalize_user_query
+)
 from rag_agent.history_store import (
     init_db,
     get_history,
@@ -160,6 +165,45 @@ async def chat_stream(request: Request):
                 yield json.dumps({"type": "token", "content": fallback}) + "\n"
 
                 full_response = fallback
+
+            lower_message = user_message.lower().strip()
+
+            is_location_response = any(
+                loc in lower_message
+                for loc in [
+                    "faridabad",
+                    "gurgaon",
+                    "gurugram",
+                    "noida",
+                    "delhi",
+                    "ghaziabad",
+                    "vaishali",
+                    "indirapuram",
+                    "meerut",
+                ]
+            )
+
+            is_direction_response = lower_message.startswith("directions from")
+
+            normalized_question = normalize_user_query(user_message)
+
+            if (
+                normalized_question in {
+                    "Where is the birthday celebration taking place?",
+                    "What time does the birthday party start?",
+                }
+                and not is_direction_response
+                and not is_location_response
+            ):
+                yield json.dumps({
+                    "type": "suggestions",
+                    "content": "🚗 Where are you coming from?",
+                    "options": [
+                        {"label": "Faridabad", "message": "directions from Faridabad"},
+                        {"label": "Gurgaon", "message": "directions from Gurgaon"},
+                        {"label": "Noida", "message": "directions from Noida"}
+                    ]
+                }) + "\n"
 
             save_message(thread_id, "user", user_message)
             save_message(thread_id, "assistant", full_response)

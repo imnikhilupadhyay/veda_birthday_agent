@@ -42,6 +42,77 @@ INTENT_TO_QUESTION = {
     "cake": "What kind of cake will be served at the birthday party?",
 }
 
+DESTINATION_NAME = "Radisson Blu Kaushambi"
+DESTINATION_ADDRESS = (
+    "Radisson Blu Kaushambi, Plot No. H-3, Sector 14, "
+    "Kaushambi, Ghaziabad, Uttar Pradesh 201012"
+)
+
+MAPS_LINK = (
+    "https://www.google.com/maps/search/?api=1"
+    "&query=Radisson%20Blu%20Kaushambi%2C%20Plot%20No.%20H-3%2C%20"
+    "Sector%2014%2C%20Kaushambi%2C%20Ghaziabad%2C%20"
+    "Uttar%20Pradesh%20201012"
+)
+
+DIRECTION_QUERIES = {
+    "directions from faridabad": {
+        "city": "Faridabad",
+        "answer": (
+            "From Faridabad, you can head towards Delhi/Ghaziabad and continue to Kaushambi. "
+            "Please start early because evening NCR traffic can be heavy."
+        ),
+    },
+    "directions from gurgaon": {
+        "city": "Gurgaon",
+        "answer": (
+            "From Gurgaon, travel via Delhi towards Akshardham/Ghaziabad side and continue to Kaushambi. "
+            "Since the party starts at 7:15 PM, starting early is a good idea."
+        ),
+    },
+    "directions from noida": {
+        "city": "Noida",
+        "answer": (
+            "From Noida, Kaushambi is relatively close. "
+            "You can come via the Noida Sector 62 / NH24 side towards Ghaziabad."
+        ),
+    },
+}
+
+LOCATION_WORDS = {
+    "faridabad",
+    "gurgaon",
+    "gurugram",
+    "noida",
+    "delhi",
+    "ghaziabad",
+    "indirapuram",
+    "vaishali",
+    "meerut",
+}
+
+def get_typed_location_answer(question: str) -> str | None:
+    cleaned = question.strip().lower().replace("?", "")
+
+    if cleaned.startswith("directions from"):
+        return None
+
+    for loc in LOCATION_WORDS:
+        if loc in cleaned:
+            city = loc.title()
+
+            if loc == "gurugram":
+                city = "Gurugram/Gurgaon"
+
+            return (
+                f"🚗 Coming from {city}? Lovely! 🎈\n\n"
+                f"The birthday celebration is at:\n"
+                f"{DESTINATION_ADDRESS}\n\n"
+                f"Tap here to open Google Maps:\n{MAPS_LINK}"
+            )
+
+    return None
+
 def classify_query_intent(user_message: str) -> dict:
     llm = ChatOpenAI(
         model=LLM_MODEL,
@@ -130,6 +201,7 @@ def normalize_user_query(question: str) -> str:
         return expanded
 
     return question
+
 def is_gibberish_query(user_message: str) -> bool:
     llm = ChatOpenAI(
         model=LLM_MODEL,
@@ -338,6 +410,40 @@ def generator_agent(question: str, history: list | None = None) -> str:
 
     return last_response_content or "I could not complete the answer because maximum tool iterations were reached."
 
+def get_direction_answer(question: str) -> str | None:
+    cleaned = question.strip().lower().replace("?", "")
+
+    # Existing suggestion-button flow
+    if cleaned in DIRECTION_QUERIES:
+        item = DIRECTION_QUERIES[cleaned]
+
+        return (
+            f"🚗 From {item['city']}:\n\n"
+            f"{item['answer']}\n\n"
+            f"📍 Open Google Maps:\n{MAPS_LINK}"
+        )
+
+    # User manually typed location
+    for location in LOCATION_WORDS:
+
+        if location in cleaned:
+
+            display_name = location.title()
+
+            if location == "gurugram":
+                display_name = "Gurugram / Gurgaon"
+
+            return (
+                f"🚗 Coming from {display_name}? Great! 🎈\n\n"
+                f"The birthday celebration is at:\n\n"
+                f"Radisson Blu Kaushambi\n"
+                f"Plot No. H-3, Sector 14,\n"
+                f"Kaushambi, Ghaziabad,\n"
+                f"Uttar Pradesh - 201012\n\n"
+                f"📍 Open Google Maps:\n{MAPS_LINK}"
+            )
+
+    return None
 
 def generator_agent_stream(
     question: str,
@@ -352,6 +458,20 @@ def generator_agent_stream(
             "content": "Please ask me something about Veda's birthday.",
         }
         return
+    
+    direction_answer = get_direction_answer(question)
+
+    if direction_answer:
+        yield {"type": "answer_start", "content": ""}
+        yield {"type": "token", "content": direction_answer}
+        return
+
+    typed_location_answer = get_typed_location_answer(question)
+
+    if typed_location_answer:
+        yield {"type": "answer_start", "content": ""}
+        yield {"type": "token", "content": typed_location_answer}
+        return
 
     expanded_question = normalize_user_query(question)
 
@@ -360,6 +480,7 @@ def generator_agent_stream(
             "type": "thinking_update",
             "content": f"Thinking... {expanded_question}...",
         }
+
 
     generator_llm = ChatOpenAI(
         model=LLM_MODEL,
@@ -462,6 +583,7 @@ def generator_agent_stream(
         "type": "token",
         "content": "I could not complete the answer because maximum tool iterations were reached.",
     }
+
 def extract_user_profile_from_query(user_message: str) -> dict:
     llm = ChatOpenAI(
         model=LLM_MODEL,

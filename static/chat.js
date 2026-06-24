@@ -22,6 +22,7 @@ async function sendMessage() {
 
     const message = input.value.trim();
     if (!message) return;
+    removeSuggestionBoxes();
 
     appendMessage(message, "user");
     input.value = "";
@@ -87,8 +88,12 @@ async function sendMessage() {
                 }
 
                 fullText += event.content;
-                botMessage.innerText = fullText;
+                botMessage.innerHTML = linkify(fullText);
                 chatBox.scrollTop = chatBox.scrollHeight;
+            }
+
+            else if (event.type === "suggestions") {
+                appendSuggestionButtons(event.content, event.options);
             }
 
             else if (event.type === "error") {
@@ -141,6 +146,52 @@ function appendThinkingBox(text) {
     chatBox.scrollTop = chatBox.scrollHeight;
 
     return div;
+}
+
+function appendSuggestionButtons(title, options) {
+    const chatBox = document.getElementById("chat-box");
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "suggestion-box";
+
+    const label = document.createElement("div");
+    label.className = "suggestion-title";
+    label.innerText = title;
+
+    wrapper.appendChild(label);
+
+    options.forEach(option => {
+        const btn = document.createElement("button");
+        btn.className = "suggestion-button";
+        btn.innerText = option.label;
+
+        btn.onclick = () => {
+            document.getElementById("message-input").value = option.message;
+            sendMessage();
+            wrapper.remove();
+        };
+
+        wrapper.appendChild(btn);
+    });
+
+    chatBox.appendChild(wrapper);
+    chatBox.scrollTop = chatBox.scrollHeight;
+}
+
+function linkify(text) {
+    const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+    return escaped.replace(
+        /(https?:\/\/[^\s]+)/g,
+        '<a href="$1" target="_blank" rel="noopener noreferrer">Open Google Maps</a>'
+    );
+}
+
+function removeSuggestionBoxes() {
+    document.querySelectorAll(".suggestion-box").forEach(box => box.remove());
 }
 
 document.getElementById("message-input").addEventListener("keydown", function(event) {
