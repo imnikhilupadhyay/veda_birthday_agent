@@ -105,3 +105,19 @@ def upsert_user_name(thread_id: str, name: str):
         )
 
         conn.commit()
+
+def get_all_user_names():
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.row_factory = sqlite3.Row
+
+        rows = conn.execute(
+            """
+            SELECT DISTINCT name
+            FROM user_profile
+            WHERE name IS NOT NULL
+              AND TRIM(name) != ''
+            ORDER BY name
+            """
+        ).fetchall()
+
+    return [row["name"] for row in rows]
