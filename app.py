@@ -21,6 +21,7 @@ from rag_agent.history_store import (
     save_message,
     get_user_profile,
     upsert_user_name,
+    get_all_user_names
 )
 from rag_agent.config import COOKIE_NAME, MAX_HISTORY_MESSAGES
 from rag_agent.generator import generator_agent_stream, extract_user_profile_from_query
@@ -51,6 +52,14 @@ def home(request: Request):
         name="index.html",
         context={"greeting": greeting}
     )
+
+@app.get("/users")
+def get_users():
+    users = get_all_user_names()
+    return {
+        "count": len(users),
+        "users": users
+    }
 
 @app.post("/chat")
 async def chat(request: Request):
