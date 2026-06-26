@@ -8,7 +8,7 @@ AI-powered birthday assistant for Veda.
 - ChromaDB vector search
 - LangChain tool calling
 - Follow-up question support
-- Gradio UI
+- JS UI
 
 ## Run Locally
 
